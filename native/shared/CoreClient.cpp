@@ -44,7 +44,7 @@ namespace Seelen
         return (std::min)(current * 2, kMaxBackoff);
     }
 
-    std::unique_ptr<CoreClient> CoreClient::FromStdin()
+    std::shared_ptr<CoreClient> CoreClient::FromStdin()
     {
         HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
         if (in == nullptr || in == INVALID_HANDLE_VALUE || GetFileType(in) != FILE_TYPE_PIPE)
@@ -69,12 +69,24 @@ namespace Seelen
         {
             return nullptr;
         }
-        return std::make_unique<CoreClient>(std::wstring(token.begin(), token.end()));
+        return std::make_shared<CoreClient>(std::wstring(token.begin(), token.end()));
     }
 
     CoreClient::CoreClient(std::wstring token)
         : token_(std::move(token)), lost_(check_pointer(CreateEventW(nullptr, TRUE, FALSE, nullptr)))
     {
+    }
+
+    CoreClient::~CoreClient()
+    {
+        CloseSocket();
+    }
+
+    void CoreClient::Stop()
+    {
+        // set before the signal: the Run loop checks it after every reset of lost_
+        stopped_ = true;
+        SetEvent(lost_.get());
     }
 
     void CoreClient::Start(std::map<std::wstring, Handler> subscriptions, std::map<std::wstring, std::wstring> initial)
@@ -87,10 +99,16 @@ namespace Seelen
 
     fire_and_forget CoreClient::Run()
     {
+        // keeps the client alive across the awaits, until Stop ends the loop
+        auto self = shared_from_this();
         auto delay = kMinBackoff;
         while (true)
         {
             ResetEvent(lost_.get());
+            if (stopped_)
+            {
+                break;
+            }
             bool connected = false;
             try
             {
@@ -102,34 +120,57 @@ namespace Seelen
                 Log(L"connection failed: " + std::wstring(err.message()));
             }
 
-            if (connected)
+            if (connected && !stopped_)
             {
                 delay = kMinBackoff;
                 co_await resume_on_signal(lost_.get());
-                Log(L"events socket lost, reconnecting");
+                Log(L"events socket lost");
             }
-            co_await resume_after(delay);
+
+            ResetEvent(lost_.get());
+            if (stopped_)
+            {
+                break;
+            }
+            // Stop wakes this wait early
+            co_await resume_on_signal(lost_.get(), delay);
             delay = NextBackoff(delay);
         }
+        CloseSocket();
+    }
+
+    void CoreClient::CloseSocket()
+    {
+        if (!socket_)
+        {
+            return;
+        }
+        socket_.MessageReceived(receivedToken_);
+        socket_.Closed(closedToken_);
+        try
+        {
+            socket_.Close();
+        }
+        catch (hresult_error const&)
+        {
+            // never connected
+        }
+        socket_ = nullptr;
     }
 
     IAsyncAction CoreClient::Connect()
     {
-        if (socket_)
-        {
-            try
-            {
-                socket_.Close();
-            }
-            catch (hresult_error const&)
-            {
-            }
-        }
+        CloseSocket();
 
         auto generation = ++generation_;
         socket_ = MessageWebSocket();
         socket_.Control().MessageType(SocketMessageType::Utf8);
-        socket_.MessageReceived([this, generation](MessageWebSocket const&, MessageWebSocketMessageReceivedEventArgs const& args) {
+        receivedToken_ = socket_.MessageReceived([weak = weak_from_this(), generation](MessageWebSocket const&, MessageWebSocketMessageReceivedEventArgs const& args) {
+            auto client = weak.lock();
+            if (!client || client->stopped_)
+            {
+                return;
+            }
             DataReader reader{ nullptr };
             try
             {
@@ -138,7 +179,7 @@ namespace Seelen
             }
             catch (hresult_error const&)
             {
-                Lost(generation);
+                client->Lost(generation);
                 return;
             }
             try
@@ -147,7 +188,7 @@ namespace Seelen
                 auto frame = JsonObject::Parse(reader.ReadString(reader.UnconsumedBufferLength()));
                 if (frame.GetNamedString(L"type", L"") == L"event")
                 {
-                    Dispatch(std::wstring(frame.GetNamedString(L"event")), frame.GetNamedValue(L"payload"));
+                    client->Dispatch(std::wstring(frame.GetNamedString(L"event")), frame.GetNamedValue(L"payload"));
                 }
             }
             catch (hresult_error const& err)
@@ -155,17 +196,24 @@ namespace Seelen
                 Log(L"bad event frame: " + std::wstring(err.message()));
             }
         });
-        socket_.Closed([this, generation](auto&&, auto&&) { Lost(generation); });
+        closedToken_ = socket_.Closed([weak = weak_from_this(), generation](auto&&, auto&&) {
+            if (auto client = weak.lock())
+            {
+                client->Lost(generation);
+            }
+        });
 
         // the websocket authenticates by query (browsers cannot set headers on it)
         co_await socket_.ConnectAsync(Uri(hstring(L"ws://") + kBaseUrl + L"/events?token=" + token_));
         // subscribe before fetching the state, so no change falls in between
         for (auto const& [event, _] : handlers_)
         {
+            if (stopped_) co_return;
             co_await Send(socket_, hstring(L"{\"type\":\"subscribe\",\"event\":\"") + event + L"\"}");
         }
         for (auto const& [command, event] : initial_)
         {
+            if (stopped_) co_return;
             Dispatch(event, co_await Invoke(hstring(command)));
         }
     }
@@ -185,7 +233,14 @@ namespace Seelen
         {
             return;
         }
-        ui_.TryEnqueue([handler = it->second, payload]() { handler(payload); });
+        // Stop runs on the UI thread too, so a handler never runs after it
+        ui_.TryEnqueue([weak = weak_from_this(), handler = it->second, payload]() {
+            auto client = weak.lock();
+            if (client && !client->stopped_)
+            {
+                handler(payload);
+            }
+        });
     }
 
     IAsyncOperation<IJsonValue> CoreClient::Invoke(hstring command, JsonObject args)

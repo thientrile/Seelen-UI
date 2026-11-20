@@ -12,7 +12,8 @@ Widgets drawn with WinUI 3 (C++/WinRT) instead of a WebView2, each one a separat
 - The token reaches the widget on stdin, never on the command line or environment. Requests with an `Origin` header are
   refused (web pages can reach localhost too).
 - `shared/CoreClient.{h,cpp}`: the client every widget uses (invoke + subscribe, reconnects with backoff and refetches
-  the initial state).
+  the initial state). Owned by a `shared_ptr`; call `Stop()` on the UI thread before the window that owns the handlers
+  closes.
 
 ## Lifecycle
 

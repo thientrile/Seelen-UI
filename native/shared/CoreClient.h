@@ -26,16 +26,18 @@ namespace Seelen
     // When the websocket drops, it reconnects with backoff, subscribes again and refetches the
     // initial state, so no change lost while disconnected stays on screen.
     //
-    // Lives as long as the process: the reconnect loop keeps a pointer to it.
-    class CoreClient
+    // Shared ownership: the reconnect loop holds a reference until Stop ends it, socket callbacks
+    // and queued handlers only a weak one, so none of them touches a destroyed client.
+    class CoreClient : public std::enable_shared_from_this<CoreClient>
     {
     public:
         using Handler = std::function<void(winrt::Windows::Data::Json::IJsonValue const&)>;
 
         // nullptr when stdin carries no token (started by hand, no core to talk to)
-        static std::unique_ptr<CoreClient> FromStdin();
+        static std::shared_ptr<CoreClient> FromStdin();
 
         explicit CoreClient(std::wstring token);
+        ~CoreClient();
         CoreClient(CoreClient const&) = delete;
         CoreClient& operator=(CoreClient const&) = delete;
 
@@ -43,6 +45,10 @@ namespace Seelen
         // whose handler receives its result (same payload as the event). Handlers run on the thread
         // that calls Start, which must have a DispatcherQueue (the UI thread). Call it once.
         void Start(std::map<std::wstring, Handler> subscriptions, std::map<std::wstring, std::wstring> initial);
+
+        // Call on the UI thread before the handlers' owner goes away: no handler runs after it,
+        // and the reconnect loop closes the socket and ends.
+        void Stop();
 
         // Runs a command of the core the widget is allowed to (allowlist in src/background/widgets/native).
         // `args` are named in camelCase, like `invoke` on the webviews. Throws hresult_error on failure.
@@ -56,15 +62,19 @@ namespace Seelen
         std::map<std::wstring, std::wstring> initial_;
         winrt::Microsoft::UI::Dispatching::DispatcherQueue ui_{ nullptr };
         winrt::Windows::Web::Http::HttpClient http_;
+        std::atomic<bool> stopped_{ false };
         // only touched by the Run loop
         winrt::Windows::Networking::Sockets::MessageWebSocket socket_{ nullptr };
+        winrt::event_token receivedToken_{};
+        winrt::event_token closedToken_{};
         // bumped on each connection, so events of an old socket are ignored
         std::atomic<unsigned> generation_{ 0 };
-        // signaled when the current websocket is gone
+        // signaled when the current websocket is gone, or on Stop
         winrt::handle lost_;
 
         winrt::fire_and_forget Run();
         winrt::Windows::Foundation::IAsyncAction Connect();
+        void CloseSocket();
         void Lost(unsigned generation);
         void Dispatch(std::wstring const& event, winrt::Windows::Data::Json::IJsonValue const& payload);
     };

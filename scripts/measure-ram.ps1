@@ -56,8 +56,10 @@ if (-not $Config) { throw '-Config is required when sampling' }
 
 for ($i = 1; $i -le $Samples; $i++) {
     $all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name
-    $roots = @($all | Where-Object Name -eq 'seelen-ui.exe' | ForEach-Object ProcessId)
-    if (-not $roots) { throw "seelen-ui.exe is not running (config $Config)" }
+    if (-not ($all | Where-Object Name -eq 'seelen-ui.exe')) { throw "seelen-ui.exe is not running (config $Config)" }
+    # WebView2 processes are not children of seelen-ui.exe (seen on run 44698919568), so they are roots too.
+    # shortcut: counts every msedgewebview2.exe on the machine, fine on a CI runner, filter by user data folder on a desktop
+    $roots = @($all | Where-Object { $_.Name -in 'seelen-ui.exe', 'msedgewebview2.exe' } | ForEach-Object ProcessId)
 
     # walk down from seelen-ui.exe; a pid reused by an unrelated process cannot point back into the tree
     $tree = [System.Collections.Generic.HashSet[uint32]]::new()
@@ -92,7 +94,7 @@ for ($i = 1; $i -le $Samples; $i++) {
         # per process breakdown of the last sample, to see where the memory goes
         Write-Host "config $Config, last sample:"
         $inTree | Sort-Object WorkingSet -Descending |
-            Format-Table Name, IDProcess,
+            Format-Table Name, IDProcess, CreatingProcessID,
                 @{ n = 'WS MB'; e = { [math]::Round($_.WorkingSet / $mb, 1) } },
                 @{ n = 'PB MB'; e = { [math]::Round($_.PrivateBytes / $mb, 1) } },
                 @{ n = 'WSP MB'; e = { [math]::Round($_.WorkingSetPrivate / $mb, 1) } } |
