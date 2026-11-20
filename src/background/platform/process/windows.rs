@@ -80,7 +80,8 @@ impl NativeProcess {
 
     pub fn kill_on_current_exit(&self) -> Result<()> {
         let job = KILL_ON_EXIT_JOB.as_ref().map_err(|err| err.clone())?;
-        let process = WindowsApi::open_process(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, self.0)?;
+        let process =
+            WindowsApi::open_process(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, self.0)?;
         unsafe { AssignProcessToJobObject(job.0, *process)? };
         Ok(())
     }
