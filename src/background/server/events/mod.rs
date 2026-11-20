@@ -4,7 +4,7 @@
 mod connection;
 mod hub;
 mod protocol;
-mod tokens;
+pub(crate) mod tokens;
 
 use seelen_core::handlers::SelfEventsToken;
 
