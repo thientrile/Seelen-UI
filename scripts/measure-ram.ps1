@@ -1,5 +1,5 @@
-# Samples the memory of the Seelen UI process tree (seelen-ui.exe and every descendant: WebView2
-# browser/renderer/GPU processes, the native toolbar) and appends one CSV row per sample.
+# Samples the memory of the Seelen UI process tree and WebView2 processes (WebView2 is not
+# guaranteed to be a child of seelen-ui.exe) and appends one CSV row per sample.
 # slu-service is started by the task scheduler, not by seelen-ui.exe, so it is reported in its own columns.
 #
 #   ./measure-ram.ps1 -Config A -Csv ram.csv            # sample
@@ -49,6 +49,19 @@ if ($Summarize) {
             "| $name - B | $($d.ws_mb) | $($d.private_mb) | $($d.ws_private_mb) |"
         }
     }
+    if ($byConfig.B) {
+        ""
+        "| weg cost vs B | Working Set (MB) | Private Bytes (MB) | WS Private (MB) |"
+        "|---|---|---|---|"
+        foreach ($name in 'D', 'N') {
+            if (-not $byConfig[$name]) { continue }
+            $d = @{}
+            foreach ($col in 'ws_mb', 'private_mb', 'ws_private_mb') {
+                $d[$col] = [math]::Round($byConfig[$name][$col] - $byConfig.B[$col], 1)
+            }
+            "| $name - B | $($d.ws_mb) | $($d.private_mb) | $($d.ws_private_mb) |"
+        }
+    }
     return
 }
 
@@ -74,7 +87,10 @@ for ($i = 1; $i -le $Samples; $i++) {
 
     # one query gives Working Set, Private Bytes and Working Set - Private for every process
     $perf = Get-CimInstance Win32_PerfRawData_PerfProc_Process | Where-Object { $_.IDProcess -ne 0 }
-    $inTree = @($perf | Where-Object { $tree.Contains([uint32]$_.IDProcess) })
+    $edgePids = @($all | Where-Object Name -eq 'msedgewebview2.exe' | ForEach-Object ProcessId)
+    $inTree = @($perf | Where-Object {
+        $tree.Contains([uint32]$_.IDProcess) -or $edgePids -contains $_.IDProcess
+    })
     $service = @($perf | Where-Object { $_.Name -like 'slu-service*' })
 
     $mb = 1MB

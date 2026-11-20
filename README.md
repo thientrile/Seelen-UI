@@ -217,6 +217,18 @@ overrides — all accessible through a clean, searchable settings interface with
 
 All distribution channels ship **signed** packages — pick whichever fits your workflow best.
 
+### Cài bản fork
+
+1. Tải `Seelen.UI_<version>_x64-setup.exe` ở [Releases của fork](https://github.com/thientrile/Seelen-UI/releases) (bản
+   mới nhất ở đầu trang) và chạy nó.
+2. Installer không được ký bằng chứng chỉ code-signing Windows, nên SmartScreen sẽ báo "Windows protected your PC". Bấm
+   **More info** → **Run anyway**. Nếu trình duyệt chặn file tải về, chọn **Keep** / **Keep anyway**.
+3. Sau khi cài, app tự kiểm tra và cài bản mới từ Releases của fork (không theo bản gốc `eythaann/Seelen-UI`). Bản fork
+   được đánh số `X.Y.Z-fork.N`, với `X.Y.Z` là phiên bản gốc mà fork đang dựa trên.
+
+Phát hành bản mới (maintainer): push tag `vX.Y.Z-fork.N` lên fork; workflow `release-fork.yml` sẽ build installer, tạo
+Release và đính kèm `latest.json` cho updater.
+
 ### Microsoft Store
 
 Download from the [Microsoft Store](https://www.microsoft.com/store/productId/9P67C2D4T9FB?ocid=pdpshare) for automatic

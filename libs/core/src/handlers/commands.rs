@@ -553,6 +553,15 @@ slu_commands_declaration! {
         @webview()
         @fallible()
         weg_import_pinned_taskbar_items() -> usize,
+    WegNativeToggleWindowState =
+        @fallible()
+        weg_native_toggle_window_state(hwnd: isize, was_focused: bool),
+    WegNativeCloseApp =
+        @fallible()
+        weg_native_close_app(hwnd: isize),
+    WegNativeRun =
+        @fallible()
+        weg_native_run(program: String, args: Option<RelaunchArguments>, working_dir: Option<std::path::PathBuf>),
 
     // Windows Manager
     WmGetRenderTree = wm_get_render_tree() -> TwmGlobalRuntimeTree,

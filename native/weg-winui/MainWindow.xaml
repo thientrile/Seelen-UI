@@ -1,0 +1,8 @@
+<Window
+    x:Class="Weg.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Padding="8">
+        <StackPanel x:Name="Items" Orientation="Horizontal" Spacing="8" />
+    </Grid>
+</Window>

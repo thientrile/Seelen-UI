@@ -27,6 +27,18 @@ that crashes (backoff 1, 2, 4, 8, 16 s, then left stopped). A widget exiting wit
 2. Add `shared/CoreClient.h/.cpp` to its `.vcxproj` like `fancy-toolbar-winui/FancyToolbar.vcxproj` does.
 3. Build it in `.github/workflows/winui-toolbar.yml`.
 
+The Weg prototype is `native/weg-winui/` and uses the same `shared/CoreClient`
+without embedding a JavaScript runtime. Set `SLU_NATIVE_WEG=1` to enable it.
+It reads Weg items, app windows, focus, and settings over IPC; item activation,
+closing, and launching use the native Weg commands. The native process currently
+renders app items and basic close menus. Drag reorder, previews, plugin/media
+items, and the full WebView context-menu surface remain on the WebView until
+their native equivalents are implemented.
+
+Weg plugins are intentionally not loaded by the native process. The project
+decision is to replace JavaScript Weg plugins with declarative JSON/YAML
+plugins in a later task.
+
 ## Not done yet
 
 - Multi-monitor: the toolbar shows on the primary monitor only. Doing it right means one window per monitor in the same
