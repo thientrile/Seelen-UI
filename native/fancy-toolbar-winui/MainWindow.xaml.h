@@ -16,7 +16,7 @@ namespace winrt::FancyToolbar::implementation
         Microsoft::UI::Composition::SystemBackdrops::DesktopAcrylicController acrylic_{ nullptr };
         Microsoft::UI::Composition::SystemBackdrops::SystemBackdropConfiguration backdropConfig_{ nullptr };
         Microsoft::UI::Xaml::DispatcherTimer clockTimer_{ nullptr };
-        std::unique_ptr<::FancyToolbar::CoreClient> core_;
+        std::unique_ptr<::Seelen::CoreClient> core_;
 
         void SetupWindow();
         void SetupBackdrop();

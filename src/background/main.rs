@@ -162,9 +162,7 @@ async fn setup(app_handle: &tauri::AppHandle<tauri::Wry>) -> Result<()> {
     SeelenUI::pre_start().await?;
     // before the widgets are created, so they can connect to the events websocket right away
     server::http::start_http_server();
-    if widgets::native_toolbar::is_enabled() {
-        widgets::native_toolbar::spawn().log_error();
-    }
+    widgets::native::NativeWidget::start_enabled();
     SeelenUI::start().await?;
 
     warn_if_elevated(app_handle);

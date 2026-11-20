@@ -7,6 +7,7 @@ use seelen_core::{
 pub struct Handlers;
 
 seelen_core::gen_tauri_wrappers!();
+seelen_core::gen_native_dispatch!();
 
 pub fn register_invoke_handler(
     app_builder: tauri::Builder<tauri::Wry>,
