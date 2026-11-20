@@ -10,6 +10,7 @@ on:
 
 jobs:
   check-msix:
+    if: github.repository == 'eythaann/Seelen-UI' # upstream-only (secrets, store, signing)
     runs-on: ubuntu-latest
     outputs:
       MSIX_ALREADY_EXIST: ${{ steps.check_msix.outputs.result }}

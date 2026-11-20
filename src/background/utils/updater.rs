@@ -9,7 +9,11 @@ use crate::{
     state::FULL_STATE,
 };
 
-pub static SIGN_PUB_KEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ4QjU1RUI0NEM0NzBERUIKUldUckRVZE10RjYxU0lpaERvdklYL05DVlg0Sk9EVngvaEgzZjMvU1NNemJTZXZ1K0dNVXU3ZkQK";
+/// Fork signing key (thientrile/Seelen-UI); also verifies SHA256SUMS.sig in the integrity check.
+pub static SIGN_PUB_KEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ0RTg3NDc1M0Q3NjY4NDkKUldSSmFIWTlkWFRvUkl3R1AzSFFONi9aVHQ3RW4zYzIwdGFXRWJnYmRQZ1k1RHQrQ1hRVmxaTnQK";
+
+/// Updates come from the fork's GitHub Releases, not upstream.
+const RELEASES_URL: &str = "https://github.com/thientrile/Seelen-UI/releases";
 
 pub async fn check_for_updates() -> Result<Option<Update>> {
     if tauri::is_dev() || has_fixed_runtime() || is_running_as_appx() {
@@ -25,12 +29,16 @@ pub async fn check_for_updates() -> Result<Option<Update>> {
             .updater_builder()
             .pubkey(SIGN_PUB_KEY)
             .endpoints(vec![
-                "https://github.com/eythaann/Seelen-UI/releases/download/nightly/latest.json"
-                    .try_into()
+                format!("{RELEASES_URL}/download/nightly/latest.json")
+                    .parse()
                     .expect("Failed to parse url"),
             ])?
             .build()?;
-        update = updater.check().await?;
+        // the fork publishes no nightly builds yet: fall back to the release channel
+        update = updater.check().await.unwrap_or_else(|err| {
+            log::warn!("Nightly update check failed: {err}");
+            None
+        });
     }
 
     // Release Channel
@@ -39,8 +47,8 @@ pub async fn check_for_updates() -> Result<Option<Update>> {
             .updater_builder()
             .pubkey(SIGN_PUB_KEY)
             .endpoints(vec![
-                "https://github.com/eythaann/Seelen-UI/releases/latest/download/latest.json"
-                    .try_into()
+                format!("{RELEASES_URL}/latest/download/latest.json")
+                    .parse()
                     .expect("Failed to parse url"),
             ])?
             .build()?;
