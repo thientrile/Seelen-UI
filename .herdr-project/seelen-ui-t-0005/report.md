@@ -1,3 +1,5 @@
+PR: https://github.com/thientrile/Seelen-UI/pull/5
+
 ## Report
 
 Implemented the native Weg prototype on top of the IPC branch:
@@ -41,7 +43,7 @@ Windows C++/WinUI compilation is only available in GitHub Actions.
 
 Run the Windows CI build and native Weg RAM measurement
 Review native Weg UI gaps before expanding feature coverage
-Open the PR against the hardened IPC branch
+Merge PR #5 after its base reaches master and checks pass
 
 ## Remember
 
