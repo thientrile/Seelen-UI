@@ -32,6 +32,21 @@ jobs:
           name: winui-toolbar
           path: out/native-toolbar/
 
+  build-weg:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build
+        run: >
+          msbuild native/weg-winui/Weg.vcxproj /restore /m
+          /p:Configuration=Release /p:Platform=x64
+          /p:OutDir=${{ github.workspace }}\out\native-weg\
+      - uses: actions/upload-artifact@v4
+        with:
+          name: winui-weg
+          path: out/native-weg/
+
   build-core:
     runs-on: windows-2025
     steps:
@@ -70,7 +85,7 @@ jobs:
             target/x86_64-pc-windows-msvc/release/SHA256SUMS.sig
 
   measure:
-    needs: [build-toolbar, build-core]
+    needs: [build-toolbar, build-weg, build-core]
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v4
@@ -82,6 +97,10 @@ jobs:
         with:
           name: winui-toolbar
           path: C:\slu\native-toolbar
+      - uses: actions/download-artifact@v4
+        with:
+          name: winui-weg
+          path: C:\slu\native-weg
       - name: Measure A (WebView2 toolbar), B (no widgets), W (WinUI toolbar)
         run: |
           $data = "$env:APPDATA\com.seelen.seelen-ui"
@@ -102,32 +121,38 @@ jobs:
             '@seelen/user-menu', '@seelen/weg', '@seelen/window-manager', '@seelen/weg-preview'
 
           # the core restarts a crashed widget, and the widget dies with the core (job object)
-          function Test-NativeLifecycle {
-            $first = Get-Process FancyToolbar -ErrorAction Stop
+          function Test-NativeLifecycle($processName) {
+            $first = Get-Process $processName -ErrorAction Stop
             Stop-Process -Id $first.Id -Force
             Start-Sleep -Seconds 5
-            $second = Get-Process FancyToolbar -ErrorAction SilentlyContinue
+            $second = Get-Process $processName -ErrorAction SilentlyContinue
             if (-not $second -or $second.Id -eq $first.Id) { throw 'the core did not restart the crashed toolbar' }
             # fresh process: proves it got its token again (the restart reconnects to the events socket)
             Start-Sleep -Seconds 10
             Stop-Process -Name seelen-ui -Force
             Start-Sleep -Seconds 3
-            if (Get-Process FancyToolbar -ErrorAction SilentlyContinue) { throw 'the toolbar outlived the core' }
+            if (Get-Process $processName -ErrorAction SilentlyContinue) { throw "$processName outlived the core" }
             'native lifecycle: restart after crash OK, killed with the core OK' | Add-Content $env:GITHUB_STEP_SUMMARY
           }
 
           function Stop-Seelen {
-            Stop-Process -Name seelen-ui, FancyToolbar, msedgewebview2, slu-service -Force -ErrorAction SilentlyContinue
+            Stop-Process -Name seelen-ui, FancyToolbar, Weg, msedgewebview2, slu-service -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 5
           }
 
-          foreach ($config in 'A', 'B', 'W') {
+          foreach ($config in 'A', 'B', 'W', 'D', 'N') {
             $byWidget = @{}
-            foreach ($id in $widgets) { $byWidget[$id] = @{ enabled = ($config -eq 'A' -and $id -eq '@seelen/fancy-toolbar') } }
+            foreach ($id in $widgets) {
+              $byWidget[$id] = @{
+                enabled = (($config -eq 'A' -and $id -eq '@seelen/fancy-toolbar') -or
+                  ($config -eq 'D' -and $id -eq '@seelen/weg'))
+              }
+            }
             # no GPU on the runner, and the same on every config
             @{ hardwareAcceleration = $false; byWidget = $byWidget } | ConvertTo-Json -Depth 5 | Set-Content "$data\settings.json"
 
             if ($config -eq 'W') { $env:SLU_NATIVE_TOOLBAR = '1' } else { Remove-Item Env:SLU_NATIVE_TOOLBAR -ErrorAction SilentlyContinue }
+            if ($config -eq 'N') { $env:SLU_NATIVE_WEG = '1' } else { Remove-Item Env:SLU_NATIVE_WEG -ErrorAction SilentlyContinue }
             Start-Process C:\slu\seelen-ui.exe -ArgumentList '--silent'
             Start-Sleep -Seconds 90
 
@@ -139,7 +164,8 @@ jobs:
             $bmp.Save("$PWD\out\screen-$config.png")
 
             ./scripts/measure-ram.ps1 -Config $config -Csv out/ram.csv
-            if ($config -eq 'W') { Test-NativeLifecycle }
+            if ($config -eq 'W') { Test-NativeLifecycle 'FancyToolbar' }
+            if ($config -eq 'N') { Test-NativeLifecycle 'Weg' }
             Stop-Seelen
           }
 

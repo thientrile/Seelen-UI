@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
-use seelen_core::{handlers::SeelenEvent, state::WegItemData};
+use seelen_core::{
+    handlers::SeelenEvent,
+    state::{RelaunchArguments, WegItemData, WegItems},
+};
 
 use crate::{
     app::emit_to_webviews,
@@ -15,6 +18,38 @@ use crate::{
 };
 
 impl crate::tauri_handlers::Handlers {
+    pub fn weg_native_close_app(hwnd: isize) -> Result<()> {
+        Window::from(hwnd).close()
+    }
+
+    pub fn weg_native_kill_app(hwnd: isize) -> Result<()> {
+        Window::from(hwnd).process().kill()
+    }
+
+    pub fn weg_native_toggle_window_state(hwnd: isize, was_focused: bool) -> Result<()> {
+        let window = Window::from(hwnd);
+        if was_focused {
+            window.set_state_async(WindowState::Minimized)?;
+        } else {
+            window.unminimize()?;
+            window.focus()?;
+        }
+        Ok(())
+    }
+
+    pub fn weg_native_run(
+        program: String,
+        args: Option<RelaunchArguments>,
+        working_dir: Option<PathBuf>,
+    ) -> Result<()> {
+        let args = args.map(|value| value.to_string());
+        shell::execute(&program, args.as_deref(), working_dir.as_deref(), false)
+    }
+
+    pub fn weg_native_write_items(items: WegItems) -> Result<()> {
+        WEG_ITEMS_MANAGER.write(items)
+    }
+
     pub fn weg_close_app(webview: tauri::WebviewWindow, hwnd: isize) -> Result<()> {
         request_widget_permission(&webview, WidgetPerm::ManageAppWindows)?;
         Window::from(hwnd).close()

@@ -97,6 +97,10 @@ impl WidgetManager {
 
         let state = FULL_STATE.load();
         for (id, widget) in filtered {
+            if crate::widgets::native::replaces_webview(&id.to_string()) {
+                self.deployments.remove(&id);
+                continue;
+            }
             if !state.is_widget_enabled(&id) {
                 self.deployments.remove(&id);
                 continue;

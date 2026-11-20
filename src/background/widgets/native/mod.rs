@@ -13,12 +13,30 @@ use crate::{
     server::events::tokens,
 };
 
-pub const NATIVE_WIDGETS: &[NativeWidget] = &[NativeWidget {
-    label: "@seelen/fancy-toolbar-native",
-    exe: r"native-toolbar\FancyToolbar.exe",
-    enable_env: "SLU_NATIVE_TOOLBAR",
-    commands: &["get_focused_app", "get_virtual_desktops"],
-}];
+pub const NATIVE_WIDGETS: &[NativeWidget] = &[
+    NativeWidget {
+        label: "@seelen/fancy-toolbar-native",
+        exe: r"native-toolbar\FancyToolbar.exe",
+        enable_env: "SLU_NATIVE_TOOLBAR",
+        commands: &["get_focused_app", "get_virtual_desktops"],
+    },
+    NativeWidget {
+        label: "@seelen/weg-native",
+        exe: r"native-weg\Weg.exe",
+        enable_env: "SLU_NATIVE_WEG",
+        commands: &[
+            "state_get_weg_items",
+            "get_user_app_windows",
+            "get_focused_app",
+            "state_get_settings",
+            "weg_native_toggle_window_state",
+            "weg_native_close_app",
+            "weg_native_kill_app",
+            "weg_native_run",
+            "weg_native_write_items",
+        ],
+    },
+];
 
 /// A crash this soon after the start counts as a failed start.
 const MIN_HEALTHY_UPTIME: Duration = Duration::from_secs(10);
@@ -34,6 +52,10 @@ pub struct NativeWidget {
     pub enable_env: &'static str,
     /// Commands of `slu_commands_declaration!` the widget may run through `/native/invoke`.
     pub commands: &'static [&'static str],
+}
+
+pub fn replaces_webview(widget_id: &str) -> bool {
+    widget_id == "@seelen/weg" && std::env::var_os("SLU_NATIVE_WEG").is_some()
 }
 
 impl NativeWidget {
@@ -142,6 +164,18 @@ mod tests {
         assert!(toolbar.can_invoke("get_focused_app"));
         assert!(!toolbar.can_invoke("set_settings"));
         assert!(NativeWidget::by_label("@seelen/fancy-toolbar").is_none());
+
+        let weg = NativeWidget::by_label("@seelen/weg-native").unwrap();
+        assert!(weg.can_invoke("state_get_weg_items"));
+        assert!(weg.can_invoke("get_user_app_windows"));
+        assert!(!weg.can_invoke("state_write_settings"));
+        assert!(!weg.can_invoke("get_media_sessions"));
+    }
+
+    #[test]
+    fn weg_native_opt_in_replaces_webview_widget() {
+        assert_eq!(replaces_webview("@seelen/weg"), std::env::var_os("SLU_NATIVE_WEG").is_some());
+        assert!(!replaces_webview("@seelen/fancy-toolbar"));
     }
 
     #[test]
