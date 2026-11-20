@@ -39,12 +39,25 @@ jobs:
       - name: Build Hook DLL
         run: cargo build --release --target ${{ env.TARGET }} -p sluhk
 
-      # createUpdaterArtifacts in tauri.conf.json makes this also emit the updater `.sig`
+      # build.rs signs SHA256SUMS with the same key
       - name: Build and bundle installer
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npx tauri build --ci --verbose --target ${{ env.TARGET }} --no-sign
+
+      # --no-sign also skips the updater signature, so sign the installer explicitly
+      - name: Updater signature
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $installer = Get-ChildItem "target/$env:TARGET/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
+          if (-not $installer) { throw "Installer not found" }
+          Get-ChildItem "target/$env:TARGET/release/bundle/nsis/*.sig" | Remove-Item
+          npx tauri signer sign $installer.FullName
+          if ($LASTEXITCODE -ne 0) { throw "Signing failed" }
 
       - name: Create release
         id: create-release
