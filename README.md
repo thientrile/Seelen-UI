@@ -49,8 +49,8 @@
 ## What is Seelen UI?
 
 [Seelen UI](https://github.com/thientrile/Seelen-UI) is a fork of the original
-[Seelen UI project](https://github.com/eythaann/Seelen-UI) by eythaann. This fork keeps the
-original project's Rust core and license; see [LICENSE](LICENSE) for the full license text.
+[Seelen UI project](https://github.com/eythaann/Seelen-UI) by eythaann. This fork keeps the original project's Rust core
+and license; see [LICENSE](LICENSE) for the full license text.
 
 [Seelen UI](https://seelen.io/apps/seelen-ui) is a full desktop environment replacement for Windows — not a theme pack,
 not a skin, but a complete rethink of how your desktop looks and works. Every element you interact with daily — the
@@ -232,10 +232,8 @@ core over localhost HTTP and a websocket.
 
 This work is not on `master` yet:
 
-- [#1](https://github.com/thientrile/Seelen-UI/pull/1) is developing the WinUI 3 toolbar prototype and RAM
-  measurement.
-- [#3](https://github.com/thientrile/Seelen-UI/pull/3) is developing hardened HTTP and websocket IPC for native
-  widgets.
+- [#1](https://github.com/thientrile/Seelen-UI/pull/1) is developing the WinUI 3 toolbar prototype and RAM measurement.
+- [#3](https://github.com/thientrile/Seelen-UI/pull/3) is developing hardened HTTP and websocket IPC for native widgets.
 
 The current `master` build remains the WebView2 build described above.
 
@@ -256,9 +254,9 @@ We welcome contributions!
 
 - Read the [Contribution Guidelines](CONTRIBUTING) to get started with terms.
 
-Fork builds and release CI use GitHub-hosted Windows runners. Do not use a self-hosted runner for this public fork.
-Fork releases are created by pushing tags in the form `vX.Y.Z-fork.N`; the `release-fork.yml` workflow builds the
-Windows installer and publishes the GitHub Release.
+Fork builds and release CI use GitHub-hosted Windows runners. Do not use a self-hosted runner for this public fork. Fork
+releases are created by pushing tags in the form `vX.Y.Z-fork.N`; the `release-fork.yml` workflow builds the Windows
+installer and publishes the GitHub Release.
 
 ## License
 
