@@ -31,9 +31,7 @@ pub const NATIVE_WIDGETS: &[NativeWidget] = &[
             "state_get_settings",
             "weg_native_toggle_window_state",
             "weg_native_close_app",
-            "weg_native_kill_app",
             "weg_native_run",
-            "weg_native_write_items",
         ],
     },
 ];

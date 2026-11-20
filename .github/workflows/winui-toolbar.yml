@@ -64,8 +64,8 @@ jobs:
         run: |
           npx tauri signer generate --ci -p throwaway -w "$RUNNER_TEMP/slu.key"
           pub=$(cat "$RUNNER_TEMP/slu.key.pub")
-          sed -i "s|^const MINISIGN_PUBLIC_KEY: &str = \".*\";|const MINISIGN_PUBLIC_KEY: \&str = \"$pub\";|" src/background/utils/integrity/checksums.rs
-          grep -q "$pub" src/background/utils/integrity/checksums.rs
+          sed -i "s|^pub static SIGN_PUB_KEY: &str = \".*\";|pub static SIGN_PUB_KEY: \&str = \"$pub\";|" src/background/utils/updater.rs
+          grep -q "$pub" src/background/utils/updater.rs
           {
             echo "TAURI_SIGNING_PRIVATE_KEY=$(cat "$RUNNER_TEMP/slu.key")"
             echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=throwaway"

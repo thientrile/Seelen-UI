@@ -559,15 +559,9 @@ slu_commands_declaration! {
     WegNativeCloseApp =
         @fallible()
         weg_native_close_app(hwnd: isize),
-    WegNativeKillApp =
-        @fallible()
-        weg_native_kill_app(hwnd: isize),
     WegNativeRun =
         @fallible()
         weg_native_run(program: String, args: Option<RelaunchArguments>, working_dir: Option<std::path::PathBuf>),
-    WegNativeWriteItems =
-        @fallible()
-        weg_native_write_items(items: WegItems),
 
     // Windows Manager
     WmGetRenderTree = wm_get_render_tree() -> TwmGlobalRuntimeTree,

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use seelen_core::{
     handlers::SeelenEvent,
-    state::{RelaunchArguments, WegItemData, WegItems},
+    state::{RelaunchArguments, WegItemData},
 };
 
 use crate::{
@@ -20,10 +20,6 @@ use crate::{
 impl crate::tauri_handlers::Handlers {
     pub fn weg_native_close_app(hwnd: isize) -> Result<()> {
         Window::from(hwnd).close()
-    }
-
-    pub fn weg_native_kill_app(hwnd: isize) -> Result<()> {
-        Window::from(hwnd).process().kill()
     }
 
     pub fn weg_native_toggle_window_state(hwnd: isize, was_focused: bool) -> Result<()> {
@@ -44,10 +40,6 @@ impl crate::tauri_handlers::Handlers {
     ) -> Result<()> {
         let args = args.map(|value| value.to_string());
         shell::execute(&program, args.as_deref(), working_dir.as_deref(), false)
-    }
-
-    pub fn weg_native_write_items(items: WegItems) -> Result<()> {
-        WEG_ITEMS_MANAGER.write(items)
     }
 
     pub fn weg_close_app(webview: tauri::WebviewWindow, hwnd: isize) -> Result<()> {

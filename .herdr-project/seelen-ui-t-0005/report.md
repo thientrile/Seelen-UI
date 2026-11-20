@@ -4,8 +4,8 @@ Implemented the native Weg prototype on top of the IPC branch:
 
 - Added `native/weg-winui/`, an unpackaged self-contained WinUI 3 C++/WinRT app
   using the shared `native/shared/CoreClient.{h,cpp}`.
-- Added native Weg commands for window activation, close/kill, launch, and state
-  writes, plus a per-widget allowlist and `SLU_NATIVE_WEG=1` opt-in.
+- Added native Weg commands for window activation, close, and launch, plus a
+  minimal per-widget allowlist and `SLU_NATIVE_WEG=1` opt-in.
 - Added Weg build, lifecycle, screenshots, and RAM configurations to the
   GitHub-hosted Windows workflow. RAM sampling now includes all
   `msedgewebview2.exe` processes, even when they are not descendants of
