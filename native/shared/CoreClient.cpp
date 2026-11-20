@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.Web.Http.Headers.h>
 
