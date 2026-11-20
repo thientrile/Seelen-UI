@@ -16,7 +16,7 @@ namespace
 
 namespace FancyToolbar
 {
-    std::unique_ptr<CoreClient> CoreClient::FromStdin()
+    std::shared_ptr<CoreClient> CoreClient::FromStdin()
     {
         HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
         if (in == nullptr || in == INVALID_HANDLE_VALUE || GetFileType(in) != FILE_TYPE_PIPE)
@@ -41,39 +41,70 @@ namespace FancyToolbar
         {
             return nullptr;
         }
-        return std::make_unique<CoreClient>(std::wstring(token.begin(), token.end()));
+        return std::make_shared<CoreClient>(std::wstring(token.begin(), token.end()));
     }
 
     CoreClient::CoreClient(std::wstring token) : token_(std::move(token))
     {
     }
 
+    CoreClient::~CoreClient()
+    {
+        Stop();
+    }
+
+    void CoreClient::Stop()
+    {
+        if (stopped_.exchange(true) || !socket_)
+        {
+            return;
+        }
+        socket_.MessageReceived(receivedToken_);
+        socket_.Closed(closedToken_);
+        try
+        {
+            socket_.Close();
+        }
+        catch (hresult_error const&)
+        {
+            // not connected yet: the pending ConnectAsync fails and Start ends
+        }
+    }
+
     fire_and_forget CoreClient::Start(std::map<std::wstring, Handler> subscriptions,
                                       std::map<std::wstring, std::wstring> initial)
     {
+        // keeps the client alive across the awaits below
+        auto self = shared_from_this();
         handlers_ = std::move(subscriptions);
         ui_ = Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
         http_ = HttpClient();
         socket_ = MessageWebSocket();
         socket_.Control().MessageType(SocketMessageType::Utf8);
-        socket_.MessageReceived([this](MessageWebSocket const&, MessageWebSocketMessageReceivedEventArgs const& args) {
-            try
-            {
-                auto reader = args.GetDataReader();
-                reader.UnicodeEncoding(UnicodeEncoding::Utf8);
-                auto frame = JsonObject::Parse(reader.ReadString(reader.UnconsumedBufferLength()));
-                if (frame.GetNamedString(L"type", L"") == L"event")
+        receivedToken_ = socket_.MessageReceived(
+            [weak = weak_from_this()](MessageWebSocket const&, MessageWebSocketMessageReceivedEventArgs const& args) {
+                auto client = weak.lock();
+                if (!client || client->stopped_)
                 {
-                    Dispatch(std::wstring(frame.GetNamedString(L"event")), frame.GetNamedValue(L"payload"));
+                    return;
                 }
-            }
-            catch (hresult_error const& err)
-            {
-                OutputDebugStringW((L"[toolbar] bad event frame: " + err.message() + L"\n").c_str());
-            }
-        });
+                try
+                {
+                    auto reader = args.GetDataReader();
+                    reader.UnicodeEncoding(UnicodeEncoding::Utf8);
+                    auto frame = JsonObject::Parse(reader.ReadString(reader.UnconsumedBufferLength()));
+                    if (frame.GetNamedString(L"type", L"") == L"event")
+                    {
+                        client->Dispatch(std::wstring(frame.GetNamedString(L"event")), frame.GetNamedValue(L"payload"));
+                    }
+                }
+                catch (hresult_error const& err)
+                {
+                    OutputDebugStringW((L"[toolbar] bad event frame: " + err.message() + L"\n").c_str());
+                }
+            });
         // shortcut: no reconnect, the toolbar keeps the last state if the core goes away; add a backoff loop before shipping
-        socket_.Closed([](auto&&, auto&&) { OutputDebugStringW(L"[toolbar] events socket closed\n"); });
+        closedToken_ = socket_.Closed([](auto&&, auto&&) { OutputDebugStringW(L"[toolbar] events socket closed\n"); });
 
         try
         {
@@ -82,10 +113,12 @@ namespace FancyToolbar
             // subscribe before fetching the initial state, so no change falls in between
             for (auto const& [event, _] : handlers_)
             {
+                if (stopped_) co_return;
                 co_await Send(hstring(L"{\"type\":\"subscribe\",\"event\":\"") + event + L"\"}");
             }
             for (auto const& [command, event] : initial)
             {
+                if (stopped_) co_return;
                 auto payload = co_await Invoke(hstring(command));
                 Dispatch(event, payload);
             }
@@ -103,7 +136,14 @@ namespace FancyToolbar
         {
             return;
         }
-        ui_.TryEnqueue([handler = it->second, payload]() { handler(payload); });
+        // Stop runs on the UI thread too, so a handler never runs after it
+        ui_.TryEnqueue([weak = weak_from_this(), handler = it->second, payload]() {
+            auto client = weak.lock();
+            if (client && !client->stopped_)
+            {
+                handler(payload);
+            }
+        });
     }
 
     IAsyncAction CoreClient::Send(hstring const& text)

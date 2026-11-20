@@ -46,6 +46,8 @@ namespace winrt::FancyToolbar::implementation
         UpdateClock();
 
         Closed([this](auto&&, auto&&) {
+            // the core handlers capture this window
+            if (core_) core_->Stop();
             UnregisterAppbar();
             if (mica_) mica_.Close();
             if (acrylic_) acrylic_.Close();
@@ -78,6 +80,9 @@ namespace winrt::FancyToolbar::implementation
         presenter.IsMinimizable(false);
         presenter.IsAlwaysOnTop(true);
         appWindow.SetPresenter(presenter);
+
+        // like the WebView2 toolbar (focusable(false)): clicking the bar must not steal focus from the app in use
+        SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, GetWindowLongPtrW(hwnd_, GWL_EXSTYLE) | WS_EX_NOACTIVATE);
 
         // Windows 11 still draws a 1px frame and rounds the corners of a borderless window
         COLORREF none = DWMWA_COLOR_NONE;

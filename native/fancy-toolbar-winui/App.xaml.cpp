@@ -12,6 +12,7 @@ namespace winrt::FancyToolbar::implementation
     void App::OnLaunched(Microsoft::UI::Xaml::LaunchActivatedEventArgs const&)
     {
         window = make<MainWindow>();
-        window.Activate();
+        // show without activating: Activate() would take focus from the app in use
+        window.AppWindow().Show(false);
     }
 }
