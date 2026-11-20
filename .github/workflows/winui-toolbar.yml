@@ -1,0 +1,137 @@
+# Prototype: builds the WinUI 3 toolbar (native/fancy-toolbar-winui) and compares its RAM with the WebView2 toolbar.
+name: "WinUI toolbar prototype"
+
+on:
+  # workflow_dispatch only shows up once the file is on the default branch, so the branch push runs it too
+  push:
+    branches: [feat/winui-toolbar]
+    paths:
+      - native/fancy-toolbar-winui/**
+      - src/background/**
+      - scripts/measure-ram.ps1
+      - .github/workflows/winui-toolbar.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-toolbar:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build
+        run: >
+          msbuild native/fancy-toolbar-winui/FancyToolbar.vcxproj /restore /m
+          /p:Configuration=Release /p:Platform=x64
+          /p:OutDir=${{ github.workspace }}\out\native-toolbar\
+      - uses: actions/upload-artifact@v4
+        with:
+          name: winui-toolbar
+          path: out/native-toolbar/
+
+  build-core:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          rust-targets: x86_64-pc-windows-msvc
+          cache-key-prefix: rust-build-x86_64-pc-windows-msvc
+      - name: Install frontend dependencies
+        run: npm install
+      # release builds verify static/ against a signature made with upstream's key, which a fork does not have.
+      # Sign with a key generated for this run and trust its public key in this build only, nothing is committed.
+      - name: Throwaway signing key
+        shell: bash
+        run: |
+          npx tauri signer generate --ci -p throwaway -w "$RUNNER_TEMP/slu.key"
+          pub=$(cat "$RUNNER_TEMP/slu.key.pub")
+          sed -i "s|^const MINISIGN_PUBLIC_KEY: &str = \".*\";|const MINISIGN_PUBLIC_KEY: \&str = \"$pub\";|" src/background/utils/integrity/checksums.rs
+          grep -q "$pub" src/background/utils/integrity/checksums.rs
+          {
+            echo "TAURI_SIGNING_PRIVATE_KEY=$(cat "$RUNNER_TEMP/slu.key")"
+            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=throwaway"
+          } >> "$GITHUB_ENV"
+      - name: Build Hook DLL
+        run: cargo build --release --target x86_64-pc-windows-msvc -p sluhk
+      - name: Build (no bundle)
+        run: npx tauri build --ci --no-bundle --target x86_64-pc-windows-msvc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: seelen-core
+          path: |
+            target/x86_64-pc-windows-msvc/release/static/**/*
+            target/x86_64-pc-windows-msvc/release/*.exe
+            target/x86_64-pc-windows-msvc/release/*.dll
+            target/x86_64-pc-windows-msvc/release/SHA256SUMS
+            target/x86_64-pc-windows-msvc/release/SHA256SUMS.sig
+
+  measure:
+    needs: [build-toolbar, build-core]
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: seelen-core
+          path: C:\slu
+      - uses: actions/download-artifact@v4
+        with:
+          name: winui-toolbar
+          path: C:\slu\native-toolbar
+      - name: Measure A (WebView2 toolbar), B (no widgets), W (WinUI toolbar)
+        run: |
+          $data = "$env:APPDATA\com.seelen.seelen-ui"
+          $toolbarData = "$data\data\seelen-fancy-toolbar"
+          New-Item -ItemType Directory -Force $toolbarData, out | Out-Null
+          # the WebView2 toolbar shows the same three things as the WinUI one
+          @"
+          left: ['@default/workspaces-dotted']
+          center: ['@default/focused-app-title']
+          right: ['@seelen/tb-calendar-popup']
+          "@ | Set-Content "$toolbarData\state.yml"
+
+          $widgets = '@seelen/calendar-popup', '@seelen/context-menu', '@seelen/apps-menu', '@seelen/dialog',
+            '@seelen/bluetooth-popup', '@seelen/flyouts', '@seelen/icon-editor', '@seelen/network-popup',
+            '@seelen/notifications', '@seelen/keyboard-selector', '@seelen/power-menu', '@seelen/media-popup',
+            '@seelen/quick-settings', '@seelen/fancy-toolbar', '@seelen/settings', '@seelen/system-tray',
+            '@seelen/tooltip', '@seelen/wallpaper-manager', '@seelen/workspaces-viewer', '@seelen/task-switcher',
+            '@seelen/user-menu', '@seelen/weg', '@seelen/window-manager', '@seelen/weg-preview'
+
+          function Stop-Seelen {
+            Stop-Process -Name seelen-ui, FancyToolbar, msedgewebview2, slu-service -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 5
+          }
+
+          foreach ($config in 'A', 'B', 'W') {
+            $byWidget = @{}
+            foreach ($id in $widgets) { $byWidget[$id] = @{ enabled = ($config -eq 'A' -and $id -eq '@seelen/fancy-toolbar') } }
+            # no GPU on the runner, and the same on every config
+            @{ hardwareAcceleration = $false; byWidget = $byWidget } | ConvertTo-Json -Depth 5 | Set-Content "$data\settings.json"
+
+            if ($config -eq 'W') { $env:SLU_NATIVE_TOOLBAR = '1' } else { Remove-Item Env:SLU_NATIVE_TOOLBAR -ErrorAction SilentlyContinue }
+            Start-Process C:\slu\seelen-ui.exe -ArgumentList '--silent'
+            Start-Sleep -Seconds 90
+
+            # proves the runner has an interactive desktop and shows what was measured
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = [System.Drawing.Bitmap]::new($screen.Width, $screen.Height)
+            [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size)
+            $bmp.Save("$PWD\out\screen-$config.png")
+
+            ./scripts/measure-ram.ps1 -Config $config -Csv out/ram.csv
+            Stop-Seelen
+          }
+
+          ./scripts/measure-ram.ps1 -Summarize -Csv out/ram.csv | Tee-Object out/summary.md | Add-Content $env:GITHUB_STEP_SUMMARY
+      - name: Collect logs
+        if: always()
+        run: Copy-Item "$env:LOCALAPPDATA\com.seelen.seelen-ui\logs" out\logs -Recurse -ErrorAction SilentlyContinue
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ram-measurement
+          path: out/
