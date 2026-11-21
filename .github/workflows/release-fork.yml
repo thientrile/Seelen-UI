@@ -1,0 +1,101 @@
+name: Release (Fork)
+
+# Fork releases: push a tag like `v2.8.12-fork.1` to build the installer, publish a GitHub Release on this
+# repository and attach the `latest.json` manifest that the in-app updater reads.
+on:
+  push:
+    tags:
+      - "v*-fork.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.repository != 'eythaann/Seelen-UI'
+    # shortcut: x64 only; add an aarch64 matrix row (like release_no_signed.yml) if ARM installers are needed
+    runs-on: windows-2025
+    env:
+      TARGET: x86_64-pc-windows-msvc
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          rust-targets: x86_64-pc-windows-msvc
+          cache-key-prefix: rust-release-fork
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Set version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $version = $env:TAG.Substring(1)
+          npx tsx scripts/versionish.ts ci $version
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build Hook DLL
+        run: cargo build --release --target ${{ env.TARGET }} -p sluhk
+
+      # build.rs signs SHA256SUMS with the same key
+      - name: Build and bundle installer
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build --ci --verbose --target ${{ env.TARGET }} --no-sign
+
+      # --no-sign also skips the updater signature, so sign the installer explicitly
+      - name: Updater signature
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $installer = Get-ChildItem "target/$env:TARGET/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
+          if (-not $installer) { throw "Installer not found" }
+          Get-ChildItem "target/$env:TARGET/release/bundle/nsis/*.sig" | Remove-Item
+          npx tauri signer sign $installer.FullName
+          if ($LASTEXITCODE -ne 0) { throw "Signing failed" }
+
+      - name: Create release
+        id: create-release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const tag = process.env.TAG;
+            const dir = `target/${process.env.TARGET}/release/bundle/nsis`;
+            const files = fs.readdirSync(dir).filter(f => f.endsWith('-setup.exe') || f.endsWith('-setup.exe.sig'));
+            if (files.length !== 2) throw new Error(`Expected installer + signature, found: ${files}`);
+
+            const { data: release } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: `Seelen UI ${tag}`,
+              generate_release_notes: true,
+              make_latest: 'true',
+            });
+
+            for (const file of files) {
+              const data = fs.readFileSync(path.join(dir, file));
+              await github.rest.repos.uploadReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.id,
+                name: file,
+                data,
+                headers: { 'content-type': 'application/octet-stream', 'content-length': data.length },
+              });
+              core.info(`Uploaded ${file}`);
+            }
+            return release.id;
+
+      - uses: ./.github/actions/generate-update-manifest
+        with:
+          release-id: ${{ steps.create-release.outputs.result }}
+          version: ${{ steps.version.outputs.version }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}

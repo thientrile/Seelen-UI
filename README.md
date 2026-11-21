@@ -11,10 +11,10 @@
 
 <div align="center">
 
-[![Contributors](https://img.shields.io/github/contributors/eythaann/seelen-ui.svg)](https://github.com/eythaann/seelen-ui/graphs/contributors)
-[![Last Commit](https://img.shields.io/github/last-commit/eythaann/seelen-ui.svg)](https://github.com/eythaann/seelen-ui/commits/main)
-[![Version](https://img.shields.io/github/v/release/eythaann/seelen-ui.svg)](https://github.com/eythaann/seelen-ui/releases)
-[![Downloads](https://img.shields.io/github/downloads/eythaann/seelen-ui/total.svg)](https://github.com/eythaann/seelen-ui/releases)
+[![Contributors](https://img.shields.io/github/contributors/thientrile/Seelen-UI.svg)](https://github.com/thientrile/Seelen-UI/graphs/contributors)
+[![Last Commit](https://img.shields.io/github/last-commit/thientrile/Seelen-UI.svg)](https://github.com/thientrile/Seelen-UI/commits/master)
+[![Version](https://img.shields.io/github/v/release/thientrile/Seelen-UI.svg)](https://github.com/thientrile/Seelen-UI/releases)
+[![Downloads](https://img.shields.io/github/downloads/thientrile/Seelen-UI/total.svg)](https://github.com/thientrile/Seelen-UI/releases)
 
 </div>
 
@@ -22,16 +22,7 @@
 
 <table align="center">
   <tr>
-    <td align="center" width="33%">
-      <a
-        href="https://apps.microsoft.com/detail/Seelen%20UI/9p67c2d4t9fb?mode=full"
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Download Seelen UI from Microsoft Store">
-        <img src="https://get.microsoft.com/images/en-us%20dark.svg" width="100%" alt="Download Seelen UI from Microsoft Store">
-      </a>
-    </td>
-    <td align="center" width="33%">
+    <td align="center" width="50%">
       <a
         href="https://discord.seelen.io"
         target="_blank"
@@ -40,7 +31,7 @@
         <img src="./documentation/images/discord-alt.png" width="100%" alt="Join the Seelen UI Discord community">
       </a>
     </td>
-    <td align="center" width="33%">
+    <td align="center" width="50%">
       <a
         href='https://www.digitalocean.com/?refcode=955c7335abf5&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge'
         target='_blank'
@@ -56,6 +47,10 @@
 ---
 
 ## What is Seelen UI?
+
+[Seelen UI](https://github.com/thientrile/Seelen-UI) is a fork of the original
+[Seelen UI project](https://github.com/eythaann/Seelen-UI) by eythaann. This fork keeps the original project's Rust core
+and license; see [LICENSE](LICENSE) for the full license text.
 
 [Seelen UI](https://seelen.io/apps/seelen-ui) is a full desktop environment replacement for Windows — not a theme pack,
 not a skin, but a complete rethink of how your desktop looks and works. Every element you interact with daily — the
@@ -206,37 +201,41 @@ overrides — all accessible through a clean, searchable settings interface with
 ## Installation
 
 > [!CAUTION]
-> Seelen UI requires the WebView runtime to be installed. On Windows 11, it comes pre-installed with the system.
-> However, on Windows 10, the WebView runtime is included with the `setup.exe` installer. Additionally, Microsoft Edge
-> is necessary to function correctly. Some users may have modified their system and removed Edge, so please ensure both
-> Edge and the WebView runtime are installed on your system.
+> The current fork build uses WebView2. On Windows 11, it comes pre-installed with the system. On Windows 10, the
+> WebView2 runtime is included with the `setup.exe` installer. Microsoft Edge is also required.
 
 > [!NOTE]
 > On fresh installations of Windows, the app might show a white or dark screen. You only need to update your Windows
 > through Windows Update and restart your PC.
 
-All distribution channels ship **signed** packages — pick whichever fits your workflow best.
+The fork distributes its installer through GitHub Releases.
 
-### Microsoft Store
+### Cài bản fork
 
-Download from the [Microsoft Store](https://www.microsoft.com/store/productId/9P67C2D4T9FB?ocid=pdpshare) for automatic
-updates managed by Windows. Updates go through Store review, so they may take 1–3 business days to appear after a
-release.
+1. Tải `Seelen.UI_<version>_x64-setup.exe` ở [Releases của fork](https://github.com/thientrile/Seelen-UI/releases) (bản
+   mới nhất ở đầu trang) và chạy nó.
+2. Installer không được ký bằng chứng chỉ code-signing Windows, nên SmartScreen sẽ báo "Windows protected your PC". Bấm
+   **More info** → **Run anyway**. Nếu trình duyệt chặn file tải về, chọn **Keep** / **Keep anyway**.
+3. Sau khi cài, app tự kiểm tra và cài bản mới từ Releases của fork (không theo bản gốc `eythaann/Seelen-UI`). Bản fork
+   được đánh số `X.Y.Z-fork.N`, với `X.Y.Z` là phiên bản gốc mà fork đang dựa trên.
 
-### Winget
+Phát hành bản mới (maintainer): push tag `vX.Y.Z-fork.N` lên fork; workflow `release-fork.yml` sẽ build installer, tạo
+Release và đính kèm `latest.json` cho updater.
 
-```pwsh
-winget install --id Seelen.SeelenUI
-```
+The Microsoft Store and Winget packages belong to the original upstream project and are not fork distribution channels.
 
-Same signed `.msix` as the Store, installable from the terminal. Updates follow the same 1–3 business day review window
-via the `winget-pkgs` project.
+## WinUI 3 direction
 
-### GitHub Releases (.msix / .exe)
+The fork is developing a WinUI 3 UI in C++/WinRT while keeping the Rust core, with the goal of reducing RAM usage
+compared with WebView2. The native toolbar prototype is enabled with `SLU_NATIVE_TOOLBAR=1` and communicates with the
+core over localhost HTTP and a websocket.
 
-Download the latest installer directly from the [Releases](https://github.com/eythaann/seelen-ui/releases) page. Both
-the `.msix` and `.exe` packages are signed. GitHub releases land immediately after a new version ships, ahead of Store
-and Winget. The `.exe` installer also delivers in-app update notifications.
+This work is not on `master` yet:
+
+- [#1](https://github.com/thientrile/Seelen-UI/pull/1) is developing the WinUI 3 toolbar prototype and RAM measurement.
+- [#3](https://github.com/thientrile/Seelen-UI/pull/3) is developing hardened HTTP and websocket IPC for native widgets.
+
+The current `master` build remains the WebView2 build described above.
 
 ---
 
@@ -254,6 +253,10 @@ the best places to go deeper.
 We welcome contributions!
 
 - Read the [Contribution Guidelines](CONTRIBUTING) to get started with terms.
+
+Fork builds and release CI use GitHub-hosted Windows runners. Do not use a self-hosted runner for this public fork. Fork
+releases are created by pushing tags in the form `vX.Y.Z-fork.N`; the `release-fork.yml` workflow builds the Windows
+installer and publishes the GitHub Release.
 
 ## License
 

@@ -20,6 +20,7 @@ concurrency:
 
 jobs:
   continuous-integration:
+    if: github.repository == 'eythaann/Seelen-UI' # upstream-only (secrets, store, signing)
     uses: ./.github/workflows/ci.yml
 
   update-tag:
