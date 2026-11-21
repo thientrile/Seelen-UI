@@ -31,6 +31,19 @@ macro_rules! __slu_command_result {
     };
 }
 
+/// Native widgets have no webview, so `@webview` commands answer an error instead of
+/// calling the handler (the call is dropped before it is type checked).
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __slu_native_call {
+    (@webview $call:block) => {
+        Err("this command needs a webview, native widgets cannot call it".into())
+    };
+    ($call:block) => {
+        $call
+    };
+}
+
 macro_rules! slu_commands_declaration {
     ($(
         $key:ident =
@@ -107,6 +120,49 @@ macro_rules! slu_commands_declaration {
                         )
                     }
                 )*
+            };
+        }
+
+        /// Generates `native_dispatch`, the counterpart of the tauri wrappers for native
+        /// (non-webview) widgets: runs a command by name with its arguments as a json object
+        /// (camelCase keys, like `invoke` on the webviews). `None` means unknown command.
+        #[macro_export]
+        #[allow(clippy::crate_in_macro_def)]
+        macro_rules! gen_native_dispatch {
+            () => {
+                /// Every declared command name, to validate the native widgets allowlists.
+                #[allow(dead_code)]
+                pub const ALL_COMMANDS: &[&str] = &[$(stringify!($fn_name)),*];
+
+                pub async fn native_dispatch(
+                    command: &str,
+                    args: serde_json::Value,
+                ) -> Option<crate::Result<serde_json::Value>> {
+                    match command {
+                        $(
+                            stringify!($fn_name) => Some($crate::__slu_native_call!(
+                                $(@webview $($with_webview)?)?
+                                {
+                                    #[derive(serde::Deserialize)]
+                                    #[serde(rename_all = "camelCase")]
+                                    struct Args { $($arg: $arg_type),* }
+
+                                    #[allow(clippy::unit_arg)]
+                                    async fn call(args: serde_json::Value) -> crate::Result<serde_json::Value> {
+                                        let Args { $($arg),* } = serde_json::from_value(args)?;
+                                        let result: crate::Result<_> = $crate::__slu_command_result!(
+                                            $(@fallible $($is_fallible)?)?
+                                            Handlers::$fn_name($($arg),*) $($($with_async)? .await)?
+                                        );
+                                        Ok(serde_json::to_value(result?)?)
+                                    }
+                                    call(args).await
+                                }
+                            )),
+                        )*
+                        _ => None,
+                    }
+                }
             };
         }
 

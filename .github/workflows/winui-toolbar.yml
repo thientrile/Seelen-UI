@@ -4,10 +4,11 @@ name: "WinUI toolbar prototype"
 on:
   # workflow_dispatch only shows up once the file is on the default branch, so the branch push runs it too
   push:
-    branches: [feat/winui-toolbar]
+    branches: [feat/winui-toolbar, hp/seelen-ui/t-0002-ipc-http-ws-hardening]
     paths:
-      - native/fancy-toolbar-winui/**
+      - native/**
       - src/background/**
+      - libs/core/src/handlers/**
       - scripts/measure-ram.ps1
       - .github/workflows/winui-toolbar.yml
   workflow_dispatch:
@@ -100,6 +101,21 @@ jobs:
             '@seelen/tooltip', '@seelen/wallpaper-manager', '@seelen/workspaces-viewer', '@seelen/task-switcher',
             '@seelen/user-menu', '@seelen/weg', '@seelen/window-manager', '@seelen/weg-preview'
 
+          # the core restarts a crashed widget, and the widget dies with the core (job object)
+          function Test-NativeLifecycle {
+            $first = Get-Process FancyToolbar -ErrorAction Stop
+            Stop-Process -Id $first.Id -Force
+            Start-Sleep -Seconds 5
+            $second = Get-Process FancyToolbar -ErrorAction SilentlyContinue
+            if (-not $second -or $second.Id -eq $first.Id) { throw 'the core did not restart the crashed toolbar' }
+            # fresh process: proves it got its token again (the restart reconnects to the events socket)
+            Start-Sleep -Seconds 10
+            Stop-Process -Name seelen-ui -Force
+            Start-Sleep -Seconds 3
+            if (Get-Process FancyToolbar -ErrorAction SilentlyContinue) { throw 'the toolbar outlived the core' }
+            'native lifecycle: restart after crash OK, killed with the core OK' | Add-Content $env:GITHUB_STEP_SUMMARY
+          }
+
           function Stop-Seelen {
             Stop-Process -Name seelen-ui, FancyToolbar, msedgewebview2, slu-service -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 5
@@ -123,6 +139,7 @@ jobs:
             $bmp.Save("$PWD\out\screen-$config.png")
 
             ./scripts/measure-ram.ps1 -Config $config -Csv out/ram.csv
+            if ($config -eq 'W') { Test-NativeLifecycle }
             Stop-Seelen
           }
 

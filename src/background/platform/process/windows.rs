@@ -1,14 +1,24 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::LazyLock};
 
 use windows::{
     ApplicationModel::AppInfo,
     Win32::{
         Foundation::HANDLE,
         Storage::Packaging::Appx::GetApplicationUserModelId,
-        System::Threading::{PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION},
+        System::{
+            JobObjects::{
+                AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+                JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+                SetInformationJobObject,
+            },
+            Threading::{
+                PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SET_QUOTA,
+                PROCESS_TERMINATE,
+            },
+        },
     },
 };
-use windows_core::Owned;
+use windows_core::{Owned, PCWSTR};
 
 use crate::{
     error::Result,
@@ -16,6 +26,11 @@ use crate::{
 };
 
 use super::Process;
+
+/// Job of the processes killed with the current one. Its handle is never closed by hand: the OS
+/// closes it when the current process exits, and KILL_ON_JOB_CLOSE then kills every member.
+static KILL_ON_EXIT_JOB: LazyLock<std::result::Result<Job, String>> =
+    LazyLock::new(|| Job::kill_on_close().map_err(|err| err.to_string()));
 
 pub struct NativeProcess(u32);
 
@@ -61,6 +76,37 @@ impl NativeProcess {
             .creation_flags(CREATE_NO_WINDOW.0)
             .spawn()?;
         Ok(())
+    }
+
+    pub fn kill_on_current_exit(&self) -> Result<()> {
+        let job = KILL_ON_EXIT_JOB.as_ref().map_err(|err| err.clone())?;
+        let process =
+            WindowsApi::open_process(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, self.0)?;
+        unsafe { AssignProcessToJobObject(job.0, *process)? };
+        Ok(())
+    }
+}
+
+struct Job(HANDLE);
+
+// a job handle is a kernel object handle, usable from any thread
+unsafe impl Send for Job {}
+unsafe impl Sync for Job {}
+
+impl Job {
+    fn kill_on_close() -> Result<Self> {
+        let job = unsafe { CreateJobObjectW(None, PCWSTR::null())? };
+        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        unsafe {
+            SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                &info as *const _ as *const std::ffi::c_void,
+                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            )?
+        };
+        Ok(Self(job))
     }
 }
 

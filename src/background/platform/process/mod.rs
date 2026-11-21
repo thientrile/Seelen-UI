@@ -55,6 +55,12 @@ impl Process {
         self.0.kill()
     }
 
+    /// Ties the process to the current one: the OS kills it when the current process exits,
+    /// crashes included.
+    pub fn kill_on_current_exit(&self) -> Result<()> {
+        self.0.kill_on_current_exit()
+    }
+
     pub fn is_seelen(&self) -> bool {
         if let Ok(exe) = self.exe_path() {
             return exe.ends_with("seelen-ui.exe");

@@ -53,7 +53,7 @@ namespace winrt::FancyToolbar::implementation
             if (acrylic_) acrylic_.Close();
         });
 
-        core_ = ::FancyToolbar::CoreClient::FromStdin();
+        core_ = ::Seelen::CoreClient::FromStdin();
         if (core_)
         {
             core_->Start(
